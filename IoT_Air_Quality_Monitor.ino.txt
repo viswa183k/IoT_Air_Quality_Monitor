@@ -1,0 +1,82 @@
+#include <WiFi.h>
+#include "DHT.h"
+#include "ThingSpeak.h"
+
+// Pin configurations
+#define DHTPIN 4
+#define DHTTYPE DHT22
+#define MQ135_PIN 34
+#define BUZZER_PIN 26
+#define LED_PIN 27
+
+// WiFi credentials
+const char* ssid = "Your_WiFi_SSID";
+const char* password = "Your_WiFi_Password";
+
+// ThingSpeak credentials
+WiFiClient client;
+unsigned long channelID = YOUR_CHANNEL_ID;
+const char* writeAPIKey = "YOUR_WRITE_API_KEY";
+
+DHT dht(DHTPIN, DHTTYPE);
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+  pinMode(MQ135_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to WiFi!");
+  
+  ThingSpeak.begin(client);
+}
+
+void loop() {
+  // Read sensor data
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+  int airQuality = analogRead(MQ135_PIN);
+
+  if (isnan(temperature) || isnan(humidity)) {
+    Serial.println("Sensor error!");
+    return;
+  }
+
+  Serial.print("Temp: ");
+  Serial.print(temperature);
+  Serial.print(" °C | Humidity: ");
+  Serial.print(humidity);
+  Serial.print(" % | Air Quality: ");
+  Serial.println(airQuality);
+
+  // Trigger alerts if AQI is bad
+  if (airQuality > 300) {
+    digitalWrite(BUZZER_PIN, HIGH);
+    digitalWrite(LED_PIN, HIGH);
+  } else {
+    digitalWrite(BUZZER_PIN, LOW);
+    digitalWrite(LED_PIN, LOW);
+  }
+
+  // Send data to ThingSpeak
+  ThingSpeak.setField(1, temperature);
+  ThingSpeak.setField(2, humidity);
+  ThingSpeak.setField(3, airQuality);
+
+  int status = ThingSpeak.writeFields(channelID, writeAPIKey);
+
+  if (status == 200) {
+    Serial.println("Data sent successfully!");
+  } else {
+    Serial.println("Error sending data!");
+  }
+
+  delay(15000); // Send data every 15 seconds
+}
